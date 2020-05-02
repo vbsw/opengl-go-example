@@ -15,3 +15,5 @@ OpenGL Go Example is distributed in the hope that it will be useful, but WITHOUT
 ## References
 - https://golang.org/doc/install
 - https://git-scm.com/book/en/v2/Getting-Started-Installing-Git
+- https://godoc.org/github.com/go-gl/gl/v3.3-core/gl
+- https://godoc.org/github.com/go-gl/glfw/v3.3/glfw

@@ -8,10 +8,12 @@
 package main
 
 import (
-	"github.com/go-gl/gl"
+	"errors"
+	"fmt"
+	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/vbsw/plainshader"
 	"runtime"
-	"strconv"
 )
 
 func init() {
@@ -19,39 +21,50 @@ func init() {
 }
 
 func main() {
-	glfw.SetErrorCallback(onError)
-
 	err := glfw.Init()
 
 	if err == nil {
-		defer glfw.Terminate()
-
 		var window *glfw.Window
-		window, err = glfw.CreateWindow(480, 360, "OpenGL Example", nil, nil)
+		defer glfw.Terminate()
+		window, err = glfw.CreateWindow(300, 300, "OpenGL Example", nil, nil)
 
 		if err == nil {
 			defer window.Destroy()
-
 			window.SetKeyCallback(onKey)
-			window.SetSizeCallback(onResize)
+//			window.SetSizeCallback(onResize)
 			window.MakeContextCurrent()
+			err = gl.Init()
 
-			for !window.ShouldClose() {
-				display()
-				window.SwapBuffers()
-				glfw.PollEvents()
+			if err == nil {
+				var vertexShader uint32
+				vertexShader, err = loadShader(gl.VERTEX_SHADER, plainshader.VertexShader)
+
+				if err == nil {
+					var fragmentShader uint32
+					fragmentShader, err = loadShader(gl.FRAGMENT_SHADER, plainshader.FragmentShader)
+
+					if err == nil {
+						var program uint32
+						program, err = loadProgram(vertexShader, fragmentShader)
+
+						if err == nil {
+							defer gl.DeleteProgram(program)
+							gl.UseProgram(program)
+
+							for !window.ShouldClose() {
+								display()
+								window.SwapBuffers()
+								glfw.PollEvents()
+							}
+						}
+					}
+				}
 			}
-		} else {
-			printError(2, err)
 		}
-	} else {
-		printError(1, err)
 	}
-}
-
-func onError(err glfw.ErrorCode, desc string) {
-	errStr := strconv.Itoa(int(err))
-	printError(3, errStr + " " + desc)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
 }
 
 func onKey(window *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
@@ -63,7 +76,7 @@ func onKey(window *glfw.Window, key glfw.Key, scancode int, action glfw.Action, 
 func display() {
 	gl.ClearColor(0, 0, 0, 0)
 	gl.Clear(gl.COLOR_BUFFER_BIT)
-
+/*
 	shaderProgram.Use()
 	defer gl.ProgramUnuse()
 
@@ -80,4 +93,79 @@ func display() {
 	defer colorAttrib.DisableArray()
 
 	gl.DrawArrays(gl.TRIANGLES, 0, len(vertices)/2/float32_size)
+*/
 }
+
+func loadShader(shaderType uint32, shaderSource **uint8) (uint32, error) {
+	shader := gl.CreateShader(shaderType)
+	gl.ShaderSource(shader, 1, shaderSource, nil)
+	gl.CompileShader(shader)
+	err := checkShader(shader, gl.COMPILE_STATUS)
+
+	if err != nil {
+		gl.DeleteShader(shader)
+	}
+	return shader, err
+}
+
+func loadProgram(vShader, fShader uint32) (uint32, error) {
+	program := gl.CreateProgram()
+	gl.AttachShader(program, vShader)
+	gl.AttachShader(program, fShader)
+	gl.LinkProgram(program)
+	err := checkProgram(program, gl.LINK_STATUS)
+
+	if err == nil {
+		gl.ValidateProgram(program)
+		err = checkProgram(program, gl.VALIDATE_STATUS)
+	}
+	if err != nil {
+		gl.DeleteProgram(program)
+	}
+	return program, err
+}
+
+func checkShader(shader, statusType uint32) error {
+	var status int32
+	var err error
+
+	gl.GetShaderiv(shader, statusType, &status)
+
+	if status == gl.FALSE {
+		var length int32
+		var infoLog string
+
+		gl.GetShaderiv(shader, gl.INFO_LOG_LENGTH, &length)
+
+		if length > 0 {
+			infoLogBytes := make([]byte, length)
+			gl.GetShaderInfoLog(shader, length, nil, &infoLogBytes[0])
+			infoLog = string(infoLogBytes)
+		}
+		err = errors.New("shader " + infoLog)
+	}
+	return err
+}
+
+func checkProgram(program, statusType uint32) error {
+	var status int32
+	var err error
+
+	gl.GetProgramiv(program, statusType, &status)
+
+	if status == gl.FALSE {
+		var length int32
+		var infoLog string
+
+		gl.GetProgramiv(program, gl.INFO_LOG_LENGTH, &length)
+
+		if length > 0 {
+			infoLogBytes := make([]byte, length)
+			gl.GetProgramInfoLog(program, length, nil, &infoLogBytes[0])
+			infoLog = string(infoLogBytes)
+		}
+		err = errors.New("program " + infoLog)
+	}
+	return err
+}
+
