@@ -17,7 +17,7 @@ import (
 )
 
 func init() {
-    runtime.LockOSThread()
+	runtime.LockOSThread()
 }
 
 func main() {
@@ -31,7 +31,7 @@ func main() {
 		if err == nil {
 			defer window.Destroy()
 			window.SetKeyCallback(onKey)
-//			window.SetSizeCallback(onResize)
+			window.SetSizeCallback(onResize)
 			window.MakeContextCurrent()
 			err = gl.Init()
 
@@ -49,10 +49,17 @@ func main() {
 
 						if err == nil {
 							defer gl.DeleteProgram(program)
+							triangleVBOs := createTriangle()
+							defer gl.DeleteBuffers(2, &triangleVBOs[0])
+							triangleVAO := createVAO(triangleVBOs)
+							defer gl.DeleteVertexArrays(1, &triangleVAO)
 							gl.UseProgram(program)
 
 							for !window.ShouldClose() {
-								display()
+								gl.ClearColor(0, 0, 0, 0)
+								gl.Clear(gl.COLOR_BUFFER_BIT)
+								gl.DrawArrays(gl.TRIANGLES, 0, 3)
+
 								window.SwapBuffers()
 								glfw.PollEvents()
 							}
@@ -73,27 +80,8 @@ func onKey(window *glfw.Window, key glfw.Key, scancode int, action glfw.Action, 
 	}
 }
 
-func display() {
-	gl.ClearColor(0, 0, 0, 0)
-	gl.Clear(gl.COLOR_BUFFER_BIT)
-/*
-	shaderProgram.Use()
-	defer gl.ProgramUnuse()
-
-	posBuffer.Bind(gl.ARRAY_BUFFER)
-
-	positionAttrib := gl.AttribLocation(shaderProgram.GetAttribLocation("position"))
-	positionAttrib.AttribPointer(4, gl.FLOAT, false, 0, uintptr(0))
-	positionAttrib.EnableArray()
-	defer positionAttrib.DisableArray()
-
-	colorAttrib := gl.AttribLocation(shaderProgram.GetAttribLocation("color"))
-	colorAttrib.AttribPointer(4, gl.FLOAT, false, 0, uintptr((len(vertices)*float32_size)/2))
-	colorAttrib.EnableArray()
-	defer colorAttrib.DisableArray()
-
-	gl.DrawArrays(gl.TRIANGLES, 0, len(vertices)/2/float32_size)
-*/
+func onResize(w *glfw.Window, width, height int) {
+	gl.Viewport(0, 0, int32(width), int32(height))
 }
 
 func loadShader(shaderType uint32, shaderSource **uint8) (uint32, error) {
@@ -169,3 +157,41 @@ func checkProgram(program, statusType uint32) error {
 	return err
 }
 
+func createTriangle() []uint32 {
+	points := []float32{
+		0.0, 1.0, 0.0,
+		1.0, -1.0, 0.0,
+		-1.0, -1.0, 0.0,
+	}
+	colours := []float32{
+		1.0, 0.0, 0.0, 1.0,
+		0.0, 1.0, 0.0, 1.0,
+		0.0, 0.0, 1.0, 1.0,
+	}
+
+	buffers := make([]uint32, 2)
+	gl.GenBuffers(2, &buffers[0])
+	gl.BindBuffer(gl.ARRAY_BUFFER, buffers[0])
+	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, gl.Ptr(points), gl.STATIC_DRAW)
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, buffers[1])
+	gl.BufferData(gl.ARRAY_BUFFER, len(colours)*4, gl.Ptr(colours), gl.STATIC_DRAW)
+
+	return buffers
+}
+
+func createVAO(buffers []uint32) uint32 {
+	var vao uint32
+	gl.GenVertexArrays(1, &vao)
+	gl.BindVertexArray(vao)
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, buffers[0])
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
+	gl.EnableVertexAttribArray(0)
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, buffers[1])
+	gl.VertexAttribPointer(1, 4, gl.FLOAT, false, 0, gl.PtrOffset(0))
+	gl.EnableVertexAttribArray(1)
+
+	return vao
+}
