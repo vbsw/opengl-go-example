@@ -54,6 +54,7 @@ func main() {
 							triangleVAO := createVAO(triangleVBOs)
 							defer gl.DeleteVertexArrays(1, &triangleVAO)
 							gl.UseProgram(program)
+							// gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 
 							for !window.ShouldClose() {
 								gl.ClearColor(0, 0, 0, 0)
