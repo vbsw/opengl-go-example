@@ -7,48 +7,13 @@
 
 package main
 
-/*
-#include <string.h>
-
-char *vertex_shader = "#version 130\n\nin vec3 vertexPosition;\nin vec4 vertexColor;\nout vec4 fragementColor;\n\nvoid main() {\n\tgl_Position = vec4(vertexPosition, 1.0f);\n\tfragementColor = vertexColor;\n}";
-char *fragment_shader = "#version 130\n\nin vec4 fragementColor;\nout vec4 color;\n\nvoid main() {\n\tcolor = fragementColor;\n}";
-*/
-import "C"
 import (
 	"errors"
 	"fmt"
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/vbsw/plainshader"
 	"runtime"
-	"unsafe"
-)
-
-var (
-	// vertexShaderSrc contains the following program:
-	//
-	//   #version 130
-	//
-	//   in vec3 vertexPosition;
-	//   in vec4 vertexColor;
-	//   out vec4 fragementColor;
-	//
-	//   void main() {
-	//     gl_Position = vec4(vertexPosition, 1.0f);
-	//     fragementColor = vertexColor;
-	//   }
-	vertexShaderSrc = (**uint8)(unsafe.Pointer(&C.vertex_shader))
-
-	// fragmentShaderSrc contains the following program:
-	//
-	//   #version 130
-	//
-	//   in vec4 fragementColor;
-	//   out vec4 color;
-	//
-	//   void main () {
-	//     color = texture(ourTexture, TexCoord);
-	//   }
-	fragmentShaderSrc = (**uint8)(unsafe.Pointer(&C.fragment_shader))
 )
 
 func init() {
@@ -72,12 +37,12 @@ func main() {
 
 			if err == nil {
 				var vShader uint32
-				vShader, err = newShader(gl.VERTEX_SHADER, vertexShaderSrc)
+				vShader, err = newShader(gl.VERTEX_SHADER, plainshader.VertexShader)
 
 				if err == nil {
 					var fShader uint32
 					defer gl.DeleteShader(vShader)
-					fShader, err = newShader(gl.FRAGMENT_SHADER, fragmentShaderSrc)
+					fShader, err = newShader(gl.FRAGMENT_SHADER, plainshader.FragmentShader)
 
 					if err == nil {
 						var program uint32
@@ -91,7 +56,7 @@ func main() {
 							vaos := newVAOs(1)
 							defer gl.DeleteVertexArrays(int32(len(vaos)), &vaos[0])
 
-							bindObjects(vaos, vbos)
+							bindObjects(program, vaos, vbos)
 							gl.UseProgram(program)
 
 							// transparancy
@@ -223,20 +188,22 @@ func newVAOs(n int) []uint32 {
 	return vaos
 }
 
-func bindObjects(vaos, vbos []uint32) {
+func bindObjects(program uint32, vaos, vbos []uint32) {
+	positionLocation := uint32(gl.GetAttribLocation(program, plainshader.PositionAttribute))
+	colorLocation := uint32(gl.GetAttribLocation(program, plainshader.ColorAttribute))
 	points := []float32{
 		0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0,
 		1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0,
 		-1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 1.0,
 	}
 	gl.BindVertexArray(vaos[0])
-	gl.EnableVertexAttribArray(0)
-	gl.EnableVertexAttribArray(1)
+	gl.EnableVertexAttribArray(positionLocation)
+	gl.EnableVertexAttribArray(colorLocation)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbos[0])
 	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, gl.Ptr(points), gl.STATIC_DRAW)
 	// position
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 7*4, gl.PtrOffset(0))
+	gl.VertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 7*4, gl.PtrOffset(0))
 	// color
-	gl.VertexAttribPointer(1, 4, gl.FLOAT, false, 7*4, gl.PtrOffset(3*4))
+	gl.VertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 7*4, gl.PtrOffset(3*4))
 }
