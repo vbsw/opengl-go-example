@@ -49,11 +49,15 @@ func main() {
 
 						if err == nil {
 							defer gl.DeleteProgram(program)
-							triangleVBOs := createTriangle()
-							defer gl.DeleteBuffers(2, &triangleVBOs[0])
-							triangleVAO := createVAO(triangleVBOs)
-							defer gl.DeleteVertexArrays(1, &triangleVAO)
+							triangleVBO := createTriangleVBO()
+							defer gl.DeleteBuffers(1, &triangleVBO)
 							gl.UseProgram(program)
+
+							// transparancy
+							// gl.Enable(gl.BLEND);
+							// gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+							// wireframe mode
 							// gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 
 							for !window.ShouldClose() {
@@ -158,41 +162,25 @@ func checkProgram(program, statusType uint32) error {
 	return err
 }
 
-func createTriangle() []uint32 {
+func createTriangleVBO() uint32 {
+	var buffer uint32
 	points := []float32{
-		0.0, 1.0, 0.0,
-		1.0, -1.0, 0.0,
-		-1.0, -1.0, 0.0,
-	}
-	colours := []float32{
-		1.0, 0.0, 0.0, 1.0,
-		0.0, 1.0, 0.0, 1.0,
-		0.0, 0.0, 1.0, 1.0,
+		0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+		1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0,
+		-1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 1.0,
 	}
 
-	buffers := make([]uint32, 2)
-	gl.GenBuffers(2, &buffers[0])
-	gl.BindBuffer(gl.ARRAY_BUFFER, buffers[0])
+	gl.GenBuffers(1, &buffer)
+	gl.BindBuffer(gl.ARRAY_BUFFER, buffer)
 	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, gl.Ptr(points), gl.STATIC_DRAW)
 
-	gl.BindBuffer(gl.ARRAY_BUFFER, buffers[1])
-	gl.BufferData(gl.ARRAY_BUFFER, len(colours)*4, gl.Ptr(colours), gl.STATIC_DRAW)
-
-	return buffers
-}
-
-func createVAO(buffers []uint32) uint32 {
-	var vao uint32
-	gl.GenVertexArrays(1, &vao)
-	gl.BindVertexArray(vao)
-
-	gl.BindBuffer(gl.ARRAY_BUFFER, buffers[0])
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 0, gl.PtrOffset(0))
+	// position
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 7*4, gl.PtrOffset(0))
 	gl.EnableVertexAttribArray(0)
 
-	gl.BindBuffer(gl.ARRAY_BUFFER, buffers[1])
-	gl.VertexAttribPointer(1, 4, gl.FLOAT, false, 0, gl.PtrOffset(0))
+	// color
+	gl.VertexAttribPointer(1, 4, gl.FLOAT, false, 7*4, gl.PtrOffset(3*4))
 	gl.EnableVertexAttribArray(1)
 
-	return vao
+	return buffer
 }
