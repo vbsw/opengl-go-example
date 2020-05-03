@@ -59,7 +59,7 @@ func main() {
 							bindObjects(program, vaos, vbos)
 							gl.UseProgram(program)
 
-							// transparancy
+							// transparency
 							// gl.Enable(gl.BLEND);
 							// gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
