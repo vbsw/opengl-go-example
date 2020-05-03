@@ -3,7 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/vbsw/opengl-go-example)](https://goreportcard.com/report/github.com/vbsw/opengl-go-example) [![Stability: Experimental](https://masterminds.github.io/stability/experimental.svg)](https://masterminds.github.io/stability/experimental.html)
 
 ## About
-OpenGL Go Example opens a window showing an image rendered in OpenGL. It is programmed using Go and GLFW. OpenGL Go Example is published on <https://github.com/vbsw/opengl-go-example>.
+OpenGL Go Example opens a window showing graphics rendered in OpenGL. It is programmed using Go and GLFW. OpenGL Go Example is published on <https://github.com/vbsw/opengl-go-example>.
 
 ## Copyright
 Copyright 2020, Vitali Baumtrok (vbsw@mailbox.org).
