@@ -1,9 +1,9 @@
-/*
- *          Copyright 2020, Vitali Baumtrok.
- * Distributed under the Boost Software License, Version 1.0.
- *     (See accompanying file LICENSE or copy at
- *        http://www.boost.org/LICENSE_1_0.txt)
- */
+//          Copyright 2020, Vitali Baumtrok.
+// Distributed under the Boost Software License, Version 1.0.
+//     (See accompanying file LICENSE or copy at
+//        http://www.boost.org/LICENSE_1_0.txt)
+
+// +build !texture
 
 package main
 
@@ -191,7 +191,8 @@ func newVAOs(n int) []uint32 {
 func bindObjects(program uint32, vaos, vbos []uint32) {
 	positionLocation := uint32(gl.GetAttribLocation(program, plainshader.PositionAttribute))
 	colorLocation := uint32(gl.GetAttribLocation(program, plainshader.ColorAttribute))
-	points := []float32{
+	// x, y, z, r, g, b (two triangles)
+	vertices := []float32{
 		0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0,
 		1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0,
 		-1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 1.0,
@@ -201,7 +202,7 @@ func bindObjects(program uint32, vaos, vbos []uint32) {
 	gl.EnableVertexAttribArray(colorLocation)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbos[0])
-	gl.BufferData(gl.ARRAY_BUFFER, len(points)*4, gl.Ptr(points), gl.STATIC_DRAW)
+	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.STATIC_DRAW)
 	// position
 	gl.VertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 7*4, gl.PtrOffset(0))
 	// color
