@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
-	"github.com/vbsw/plainshader"
+	"github.com/vbsw/shaders"
 	"runtime"
 )
 
@@ -36,47 +36,40 @@ func main() {
 			err = gl.Init()
 
 			if err == nil {
-				var vShader uint32
-				vShader, err = newShader(gl.VERTEX_SHADER, plainshader.VertexShader)
+				shader := shaders.NewPrimitiveShader()
+				err = initShaderProgram(shader)
 
 				if err == nil {
-					var fShader uint32
-					defer gl.DeleteShader(vShader)
-					fShader, err = newShader(gl.FRAGMENT_SHADER, plainshader.FragmentShader)
+					defer gl.DeleteShader(shader.VertexShaderID)
+					defer gl.DeleteShader(shader.FragmentShaderID)
+					defer gl.DeleteProgram(shader.ProgramID)
 
 					if err == nil {
-						var program uint32
-						defer gl.DeleteShader(fShader)
-						program, err = newProgram(vShader, fShader)
+						vbos := newVBOs(1)
+						defer gl.DeleteBuffers(int32(len(vbos)), &vbos[0])
+						vaos := newVAOs(1)
+						defer gl.DeleteVertexArrays(int32(len(vaos)), &vaos[0])
 
-						if err == nil {
-							defer gl.DeleteProgram(program)
-							vbos := newVBOs(1)
-							defer gl.DeleteBuffers(int32(len(vbos)), &vbos[0])
-							vaos := newVAOs(1)
-							defer gl.DeleteVertexArrays(int32(len(vaos)), &vaos[0])
+						bindObjects(shader, vaos, vbos)
+						gl.UseProgram(shader.ProgramID)
 
-							bindObjects(program, vaos, vbos)
-							gl.UseProgram(program)
+						// transparency
+						// gl.Enable(gl.BLEND);
+						// gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-							// transparency
-							// gl.Enable(gl.BLEND);
-							// gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+						// wireframe mode
+						// gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 
-							// wireframe mode
-							// gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+						for !window.ShouldClose() {
+							gl.ClearColor(0, 0, 0, 0)
+							gl.Clear(gl.COLOR_BUFFER_BIT)
 
-							for !window.ShouldClose() {
-								gl.ClearColor(0, 0, 0, 0)
-								gl.Clear(gl.COLOR_BUFFER_BIT)
-
-								for _, vao := range vaos {
-									gl.BindVertexArray(vao)
-									gl.DrawArrays(gl.TRIANGLES, 0, 3)
-								}
-								window.SwapBuffers()
-								glfw.PollEvents()
+							for _, vao := range vaos {
+								gl.BindVertexArray(vao)
+								gl.DrawArrays(gl.TRIANGLES, 0, 3)
 							}
+							window.SwapBuffers()
+							glfw.PollEvents()
 						}
 					}
 				}
@@ -98,22 +91,47 @@ func onResize(w *glfw.Window, width, height int) {
 	gl.Viewport(0, 0, int32(width), int32(height))
 }
 
-func newShader(shaderType uint32, shaderSource **uint8) (uint32, error) {
-	shader := gl.CreateShader(shaderType)
-	gl.ShaderSource(shader, 1, shaderSource, nil)
-	gl.CompileShader(shader)
-	err := checkShader(shader, gl.COMPILE_STATUS)
+func initShaderProgram(shader *shaders.Shader) error {
+	var err error
+	shader.VertexShaderID, err = newShader(gl.VERTEX_SHADER, shader.VertexShader)
 
-	if err != nil {
-		gl.DeleteShader(shader)
+	if err == nil {
+		shader.FragmentShaderID, err = newShader(gl.FRAGMENT_SHADER, shader.FragmentShader)
+
+		if err == nil {
+			shader.ProgramID, err = newProgram(shader)
+
+			if err == nil {
+				shader.PositionLocation = gl.GetAttribLocation(shader.ProgramID, shader.PositionAttribute)
+				shader.ColorLocation = gl.GetAttribLocation(shader.ProgramID, shader.ColorAttribute)
+
+			} else {
+				gl.DeleteShader(shader.VertexShaderID)
+				gl.DeleteShader(shader.FragmentShaderID)
+			}
+		} else {
+			gl.DeleteShader(shader.VertexShaderID)
+		}
 	}
-	return shader, err
+	return err
 }
 
-func newProgram(vShader, fShader uint32) (uint32, error) {
+func newShader(shaderType uint32, shaderSource **uint8) (uint32, error) {
+	shaderID := gl.CreateShader(shaderType)
+	gl.ShaderSource(shaderID, 1, shaderSource, nil)
+	gl.CompileShader(shaderID)
+	err := checkShader(shaderID, gl.COMPILE_STATUS)
+
+	if err != nil {
+		gl.DeleteShader(shaderID)
+	}
+	return shaderID, err
+}
+
+func newProgram(shader *shaders.Shader) (uint32, error) {
 	program := gl.CreateProgram()
-	gl.AttachShader(program, vShader)
-	gl.AttachShader(program, fShader)
+	gl.AttachShader(program, shader.VertexShaderID)
+	gl.AttachShader(program, shader.FragmentShaderID)
 	gl.LinkProgram(program)
 	err := checkProgram(program, gl.LINK_STATUS)
 
@@ -132,21 +150,21 @@ func newProgram(vShader, fShader uint32) (uint32, error) {
 	return program, err
 }
 
-func checkShader(shader, statusType uint32) error {
+func checkShader(shaderID, statusType uint32) error {
 	var status int32
 	var err error
 
-	gl.GetShaderiv(shader, statusType, &status)
+	gl.GetShaderiv(shaderID, statusType, &status)
 
 	if status == gl.FALSE {
 		var length int32
 		var infoLog string
 
-		gl.GetShaderiv(shader, gl.INFO_LOG_LENGTH, &length)
+		gl.GetShaderiv(shaderID, gl.INFO_LOG_LENGTH, &length)
 
 		if length > 0 {
 			infoLogBytes := make([]byte, length)
-			gl.GetShaderInfoLog(shader, length, nil, &infoLogBytes[0])
+			gl.GetShaderInfoLog(shaderID, length, nil, &infoLogBytes[0])
 			infoLog = string(infoLogBytes)
 		}
 		err = errors.New("shader " + infoLog)
@@ -188,23 +206,21 @@ func newVAOs(n int) []uint32 {
 	return vaos
 }
 
-func bindObjects(program uint32, vaos, vbos []uint32) {
-	positionLocation := uint32(gl.GetAttribLocation(program, plainshader.PositionAttribute))
-	colorLocation := uint32(gl.GetAttribLocation(program, plainshader.ColorAttribute))
-	// x, y, z, r, g, b (two triangles)
+func bindObjects(shader *shaders.Shader, vaos, vbos []uint32) {
+	// x, y, z, r, g, b (one triangle)
 	vertices := []float32{
 		0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0,
 		1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0,
 		-1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 1.0,
 	}
 	gl.BindVertexArray(vaos[0])
-	gl.EnableVertexAttribArray(positionLocation)
-	gl.EnableVertexAttribArray(colorLocation)
+	gl.EnableVertexAttribArray(uint32(shader.PositionLocation))
+	gl.EnableVertexAttribArray(uint32(shader.ColorLocation))
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbos[0])
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.STATIC_DRAW)
 	// position
-	gl.VertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 7*4, gl.PtrOffset(0))
+	gl.VertexAttribPointer(uint32(shader.PositionLocation), 3, gl.FLOAT, false, 7*4, gl.PtrOffset(0))
 	// color
-	gl.VertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 7*4, gl.PtrOffset(3*4))
+	gl.VertexAttribPointer(uint32(shader.ColorLocation), 4, gl.FLOAT, false, 7*4, gl.PtrOffset(3*4))
 }
