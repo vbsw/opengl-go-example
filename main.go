@@ -4,6 +4,7 @@
 //        http://www.boost.org/LICENSE_1_0.txt)
 
 // +build !texture
+// +build !texture2
 
 package main
 
@@ -43,34 +44,31 @@ func main() {
 					defer gl.DeleteShader(shader.VertexShaderID)
 					defer gl.DeleteShader(shader.FragmentShaderID)
 					defer gl.DeleteProgram(shader.ProgramID)
+					vbos := newVBOs(1)
+					defer gl.DeleteBuffers(int32(len(vbos)), &vbos[0])
+					vaos := newVAOs(1)
+					defer gl.DeleteVertexArrays(int32(len(vaos)), &vaos[0])
 
-					if err == nil {
-						vbos := newVBOs(1)
-						defer gl.DeleteBuffers(int32(len(vbos)), &vbos[0])
-						vaos := newVAOs(1)
-						defer gl.DeleteVertexArrays(int32(len(vaos)), &vaos[0])
+					bindObjects(shader, vaos, vbos)
+					gl.UseProgram(shader.ProgramID)
 
-						bindObjects(shader, vaos, vbos)
-						gl.UseProgram(shader.ProgramID)
+					// transparency
+					// gl.Enable(gl.BLEND);
+					// gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-						// transparency
-						// gl.Enable(gl.BLEND);
-						// gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+					// wireframe mode
+					// gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 
-						// wireframe mode
-						// gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+					for !window.ShouldClose() {
+						gl.ClearColor(0, 0, 0, 0)
+						gl.Clear(gl.COLOR_BUFFER_BIT)
 
-						for !window.ShouldClose() {
-							gl.ClearColor(0, 0, 0, 0)
-							gl.Clear(gl.COLOR_BUFFER_BIT)
-
-							for _, vao := range vaos {
-								gl.BindVertexArray(vao)
-								gl.DrawArrays(gl.TRIANGLES, 0, 3)
-							}
-							window.SwapBuffers()
-							glfw.PollEvents()
+						for _, vao := range vaos {
+							gl.BindVertexArray(vao)
+							gl.DrawArrays(gl.TRIANGLES, 0, 3)
 						}
+						window.SwapBuffers()
+						glfw.PollEvents()
 					}
 				}
 			}
@@ -139,11 +137,7 @@ func newProgram(shader *shaders.Shader) (uint32, error) {
 		gl.ValidateProgram(program)
 		err = checkProgram(program, gl.VALIDATE_STATUS)
 
-		if err == nil {
-			gl.EnableVertexAttribArray(0)
-			gl.EnableVertexAttribArray(1)
-
-		} else {
+		if err != nil {
 			gl.DeleteProgram(program)
 		}
 	}
