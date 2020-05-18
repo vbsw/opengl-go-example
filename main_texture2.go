@@ -3,7 +3,7 @@
 //     (See accompanying file LICENSE or copy at
 //        http://www.boost.org/LICENSE_1_0.txt)
 
-// +build texture
+// +build texture2
 
 package main
 
@@ -36,13 +36,17 @@ func main() {
 			err = gl.Init()
 
 			if err == nil {
-				shader := shaders.NewTextureShader()
-				err = initShaderProgram(shader)
+				primitiveShader := shaders.NewPrimitiveShader()
+				textureShader := shaders.NewTextureShader()
+				err = initShaderPrograms(primitiveShader, textureShader)
 
 				if err == nil {
-					defer gl.DeleteShader(shader.VertexShaderID)
-					defer gl.DeleteShader(shader.FragmentShaderID)
-					defer gl.DeleteProgram(shader.ProgramID)
+					defer gl.DeleteShader(primitiveShader.VertexShaderID)
+					defer gl.DeleteShader(primitiveShader.FragmentShaderID)
+					defer gl.DeleteProgram(primitiveShader.ProgramID)
+					defer gl.DeleteShader(textureShader.VertexShaderID)
+					defer gl.DeleteShader(textureShader.FragmentShaderID)
+					defer gl.DeleteProgram(textureShader.ProgramID)
 					vbos := newVBOs(2)
 					defer gl.DeleteBuffers(int32(len(vbos)), &vbos[0])
 					vaos := newVAOs(1)
@@ -50,12 +54,12 @@ func main() {
 					textures := newTextures(1)
 					defer gl.DeleteTextures(int32(len(textures)), &textures[0])
 
-					bindObjects(shader, vaos, vbos, textures)
-					gl.UseProgram(shader.ProgramID)
+					bindPrimitiveObjects(primitiveShader, vaos, vbos)
+					bindTextureObjects(textureShader, vaos, vbos[1:], textures)
 
 					// transparency
-					// gl.Enable(gl.BLEND);
-					// gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+					gl.Enable(gl.BLEND);
+					gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
 					// wireframe mode
 					// gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
@@ -63,7 +67,26 @@ func main() {
 					for !window.ShouldClose() {
 						gl.ClearColor(0, 0, 0, 0)
 						gl.Clear(gl.COLOR_BUFFER_BIT)
+
+						gl.UseProgram(primitiveShader.ProgramID)
+						for _, vao := range vaos {
+							gl.BindVertexArray(vao)
+							gl.DrawArrays(gl.TRIANGLES, 0, 3)
+						}
+						gl.BindVertexArray(0)
+
+						gl.UseProgram(textureShader.ProgramID)
+						gl.BindTexture(gl.TEXTURE_2D, textures[0])
 						gl.DrawArrays(gl.TRIANGLE_STRIP, 0, 4)
+						/*
+							gl.UseProgram(textureShader.ProgramID)
+							gl.ActiveTexture(gl.TEXTURE0);
+							gl.BindTexture(gl.TEXTURE_2D, textures[0])
+							gl.Uniform1i(textureShader.TextureLocation, 0)
+							gl.BindVertexArray(vaos[0])
+
+							gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, unsafe.Pointer(nil))
+						*/
 
 						window.SwapBuffers()
 						glfw.PollEvents()
@@ -87,6 +110,31 @@ func onResize(w *glfw.Window, width, height int) {
 	gl.Viewport(0, 0, int32(width), int32(height))
 }
 
+func initShaderPrograms(primitiveShader, textureShader *shaders.Shader) error {
+	err := initShaderProgram(primitiveShader)
+
+	if err == nil {
+		primitiveShader.PositionLocation = gl.GetAttribLocation(primitiveShader.ProgramID, primitiveShader.PositionAttribute)
+		primitiveShader.ColorLocation = gl.GetAttribLocation(primitiveShader.ProgramID, primitiveShader.ColorAttribute)
+
+		err = initShaderProgram(textureShader)
+
+		if err == nil {
+			primitiveShader.PositionLocation = gl.GetAttribLocation(primitiveShader.ProgramID, primitiveShader.PositionAttribute)
+			primitiveShader.ColorLocation = gl.GetAttribLocation(primitiveShader.ProgramID, primitiveShader.ColorAttribute)
+			textureShader.PositionLocation = gl.GetAttribLocation(textureShader.ProgramID, textureShader.PositionAttribute)
+			textureShader.CoordsLocation = gl.GetAttribLocation(textureShader.ProgramID, textureShader.CoordsAttribute)
+			textureShader.TextureLocation = gl.GetUniformLocation(textureShader.ProgramID, textureShader.TextureUniform)
+
+		} else {
+			gl.DeleteShader(primitiveShader.VertexShaderID)
+			gl.DeleteShader(primitiveShader.FragmentShaderID)
+			gl.DeleteProgram(primitiveShader.ProgramID)
+		}
+	}
+	return err
+}
+
 func initShaderProgram(shader *shaders.Shader) error {
 	var err error
 	shader.VertexShaderID, err = newShader(gl.VERTEX_SHADER, shader.VertexShader)
@@ -97,12 +145,7 @@ func initShaderProgram(shader *shaders.Shader) error {
 		if err == nil {
 			shader.ProgramID, err = newProgram(shader)
 
-			if err == nil {
-				shader.PositionLocation = gl.GetAttribLocation(shader.ProgramID, shader.PositionAttribute)
-				shader.CoordsLocation = gl.GetAttribLocation(shader.ProgramID, shader.CoordsAttribute)
-				shader.TextureLocation = gl.GetUniformLocation(shader.ProgramID, shader.TextureUniform)
-
-			} else {
+			if err != nil {
 				gl.DeleteShader(shader.VertexShaderID)
 				gl.DeleteShader(shader.FragmentShaderID)
 			}
@@ -205,7 +248,27 @@ func newTextures(n int) []uint32 {
 	return textures
 }
 
-func bindObjects(shader *shaders.Shader, vaos, vbos, textures []uint32) {
+func bindPrimitiveObjects(shader *shaders.Shader, vaos, vbos []uint32) {
+	// x, y, z, r, g, b (one triangle)
+	vertices := []float32{
+		0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+		1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0,
+		-1.0, -1.0, 0.0, 0.0, 0.0, 1.0, 1.0,
+	}
+	gl.BindVertexArray(vaos[0])
+	gl.EnableVertexAttribArray(uint32(shader.PositionLocation))
+	gl.EnableVertexAttribArray(uint32(shader.ColorLocation))
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, vbos[0])
+	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.STATIC_DRAW)
+	// position
+	gl.VertexAttribPointer(uint32(shader.PositionLocation), 3, gl.FLOAT, false, 7*4, gl.PtrOffset(0))
+	// color
+	gl.VertexAttribPointer(uint32(shader.ColorLocation), 4, gl.FLOAT, false, 7*4, gl.PtrOffset(3*4))
+	gl.BindVertexArray(0)
+}
+
+func bindTextureObjects(shader *shaders.Shader, vaos, vbos, textures []uint32) {
 	textureData := newTextureData()
 	// x, y, z, x_tex, y_tex (two triangles)
 	vertices := []float32{
@@ -228,6 +291,48 @@ func bindObjects(shader *shaders.Shader, vaos, vbos, textures []uint32) {
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	gl.BindTexture(gl.TEXTURE_2D, 0)
+	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+	/*
+		textureData := newTextureData()
+		// x, y, z, x_tex, y_tex (two triangles)
+		vertices := []float32{
+			0.5, 0.5, 0.0, 1.0, 1.0,
+			0.5, 0.0, 0.0, 1.0, 0.0,
+			0.0, 0.5, 0.0, 0.0, 1.0,
+			0.0, 0.0, 0.0, 0.0, 0.0,
+		}
+		indices := []uint32 {
+			0, 1, 2,
+			2, 1, 3,
+		}
+
+		gl.BindVertexArray(vaos[0])
+
+		gl.BindBuffer(gl.ARRAY_BUFFER, vbos[0])
+		gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.STATIC_DRAW)
+
+		gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, vbos[1])
+		gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices)*4, gl.Ptr(indices), gl.STATIC_DRAW)
+
+		// position
+		gl.VertexAttribPointer(uint32(shader.PositionLocation), 3, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
+		gl.EnableVertexAttribArray(uint32(shader.PositionLocation))
+		// color
+		gl.VertexAttribPointer(uint32(shader.CoordsLocation), 2, gl.FLOAT, false, 5*4, gl.PtrOffset(3*4))
+		gl.EnableVertexAttribArray(uint32(shader.CoordsLocation))
+
+		gl.ActiveTexture(gl.TEXTURE0);
+		gl.BindTexture(gl.TEXTURE_2D, textures[0]);
+
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE)
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 64, 64, 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(textureData));
+		// gl.GenerateMipmap(gl.TEXTURE_2D);
+	*/
 }
 
 func newTextureData() []uint8 {
