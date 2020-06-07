@@ -3,7 +3,7 @@
 //     (See accompanying file LICENSE or copy at
 //        http://www.boost.org/LICENSE_1_0.txt)
 
-// +build texture2
+// +build texture3
 
 package main
 
@@ -14,6 +14,7 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/vbsw/shaders"
 	"runtime"
+	"unsafe"
 )
 
 func init() {
@@ -47,15 +48,15 @@ func main() {
 					defer gl.DeleteShader(textureShader.VertexShaderID)
 					defer gl.DeleteShader(textureShader.FragmentShaderID)
 					defer gl.DeleteProgram(textureShader.ProgramID)
-					vbos := newVBOs(2)
+					vbos := newVBOs(3)
 					defer gl.DeleteBuffers(int32(len(vbos)), &vbos[0])
-					vaos := newVAOs(1)
+					vaos := newVAOs(2)
 					defer gl.DeleteVertexArrays(int32(len(vaos)), &vaos[0])
 					textures := newTextures(1)
 					defer gl.DeleteTextures(int32(len(textures)), &textures[0])
 
 					bindPrimitiveObjects(primitiveShader, vaos, vbos)
-					bindTextureObjects(textureShader, vaos, vbos[1:], textures)
+					bindTextureObjects(textureShader, vaos[1:], vbos[1:], textures)
 
 					// transparency
 					gl.Enable(gl.BLEND);
@@ -68,16 +69,22 @@ func main() {
 						gl.ClearColor(0, 0, 0, 0)
 						gl.Clear(gl.COLOR_BUFFER_BIT)
 
+						// triangle
 						gl.UseProgram(primitiveShader.ProgramID)
-						for _, vao := range vaos {
-							gl.BindVertexArray(vao)
-							gl.DrawArrays(gl.TRIANGLES, 0, 3)
-						}
+						gl.BindVertexArray(vaos[0])
+						gl.DrawArrays(gl.TRIANGLES, 0, 3)
 						gl.BindVertexArray(0)
 
+						// texture
 						gl.UseProgram(textureShader.ProgramID)
+						gl.BindVertexArray(vaos[1])
+						gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, vbos[2])
 						gl.BindTexture(gl.TEXTURE_2D, textures[0])
-						gl.DrawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+						gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, unsafe.Pointer(nil))
+						gl.BindTexture(gl.TEXTURE_2D, 0)
+						gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
+						gl.BindVertexArray(0)
 
 						window.SwapBuffers()
 						glfw.PollEvents()
@@ -259,7 +266,7 @@ func bindPrimitiveObjects(shader *shaders.Shader, vaos, vbos []uint32) {
 	gl.BindVertexArray(0)
 }
 
-func bindTextureObjects(shader *shaders.Shader, vaos, vbos, textures []uint32) {
+func bindTextureObjects(shader *shaders.Shader, vaos, bufferObjs, textures []uint32) {
 	textureData := newTextureData()
 	// x, y, z, x_tex, y_tex (two triangles)
 	vertices := []float32{
@@ -268,22 +275,45 @@ func bindTextureObjects(shader *shaders.Shader, vaos, vbos, textures []uint32) {
 		0.0, 0.5, 0.0, 0.0, 1.0,
 		0.0, 0.0, 0.0, 0.0, 0.0,
 	}
-	gl.BindTexture(gl.TEXTURE_2D, textures[0])
-	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 64, 64, 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(textureData))
-	gl.BindBuffer(gl.ARRAY_BUFFER, vbos[0])
+	// indexed drawing
+	indices := []uint32 {
+		0, 1, 2,
+		2, 1, 3,
+	}
+
+	gl.BindVertexArray(vaos[0])
+
+	// vertex buffer object (VBO)
+	gl.BindBuffer(gl.ARRAY_BUFFER, bufferObjs[0])
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.STATIC_DRAW)
 
-	gl.EnableVertexAttribArray(uint32(shader.PositionLocation))
-	gl.EnableVertexAttribArray(uint32(shader.CoordsLocation))
+	// element buffer object (EBO)
+	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, bufferObjs[1])
+	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices)*4, gl.Ptr(indices), gl.STATIC_DRAW)
+
+	// position
 	gl.VertexAttribPointer(uint32(shader.PositionLocation), 3, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
+	gl.EnableVertexAttribArray(uint32(shader.PositionLocation))
+	// color
 	gl.VertexAttribPointer(uint32(shader.CoordsLocation), 2, gl.FLOAT, false, 5*4, gl.PtrOffset(3*4))
+	gl.EnableVertexAttribArray(uint32(shader.CoordsLocation))
+
+	gl.ActiveTexture(gl.TEXTURE0);
+	// the default texture unit is 0 (anyway, set it explicitly after activating texture unit)
+	gl.Uniform1i(shader.TextureLocation, 0)
+	gl.BindTexture(gl.TEXTURE_2D, textures[0])
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 64, 64, 0, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(textureData));
+	// gl.GenerateMipmap(gl.TEXTURE_2D);
 
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-	gl.BindTexture(gl.TEXTURE_2D, 0)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
+	gl.BindTexture(gl.TEXTURE_2D, 0)
+	gl.BindVertexArray(0)
 }
 
 func newTextureData() []uint8 {
@@ -296,6 +326,9 @@ func newTextureData() []uint8 {
 			data[offset+1] = 255
 			data[offset+2] = 255
 			data[offset+3] = 255
+		} else {
+			// alpha
+			data[offset+3] = 80
 		}
 	}
 	return data

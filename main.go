@@ -5,7 +5,9 @@
 
 // +build !texture
 // +build !texture2
+// +build !texture3
 
+// Package opengl-go-example opens a window showing graphics rendered in OpenGL. It is programmed using GLFW.
 package main
 
 import (
